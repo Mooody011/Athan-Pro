@@ -1,0 +1,62 @@
+name: Build Athan Pro APK
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build-android:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+
+      - name: Generate Android Platform Files
+        run: |
+          flutter create --platforms=android --org com.athanpro --project-name athan_pro .
+          rm -rf test
+
+      - name: Configure AndroidManifest (Arabic App Name & Permissions)
+        run: |
+          python3 - << 'EOF'
+          import os, re
+          manifest_path = "android/app/src/main/AndroidManifest.xml"
+          with open(manifest_path, "r", encoding="utf-8") as f:
+              text = f.read()
+          text = re.sub(r'android:label="[^"]*"', 'android:label="آذان برو"', text, count=1)
+          perms = [
+              '<uses-permission android:name="android.permission.INTERNET"/>',
+              '<uses-permission android:name="android.permission.VIBRATE"/>',
+          ]
+          for p in perms:
+              if p not in text:
+                  text = text.replace("<application", f"    {p}\n    <application", 1)
+          with open(manifest_path, "w", encoding="utf-8") as f:
+              f.write(text)
+          EOF
+
+      - name: Install Dependencies
+        run: flutter pub get
+
+      - name: Build Release APK
+        run: flutter build apk --release
+
+      - name: Upload APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Athan-Pro-Release-APK
+          path: build/app/outputs/flutter-apk/app-release.apk
+          retention-days: 30
